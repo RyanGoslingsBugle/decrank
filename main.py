@@ -1,26 +1,15 @@
 from os import listdir
+
+import numpy as np
+import pandas as pd
+import torch
+from scipy import sparse
+
 import dbsetup
 import frameset
 import preprocess
-from scipy import sparse
-import torch
-import numpy as np
-import pandas as pd
-
-
-def cuda_check():
-    """
-    Run CUDA checks and print device info
-    """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('Using device:', device)
-    # Additional Info when using cuda
-    if device.type == 'cuda':
-        print(torch.cuda.get_device_name(0))
-        print('Memory Usage:')
-        print('Allocated:', round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
-        print('Cached:   ', round(torch.cuda.memory_cached(0) / 1024 ** 3, 1), 'GB')
-    print()
+import skmodels
+import collect_env
 
 
 def import_files():
@@ -54,9 +43,9 @@ def load(collection):
     """
     Load and format tweet data as Pandas dataframe
     :param collection: Collection name to read from
-    :return: Pandas dataframe
+    :return: Pandas Dataframe
     """
-    print("Reading to dataframe...")
+    print("Reading to Dataframe...")
     framer = frameset.Framer('astroturf')
     df = framer.get_frame(collection)
     return df
@@ -79,14 +68,14 @@ def process(df, type_str):
     sparse.save_npz('{}-data-tf.npz'.format(type_str), data_arr)
     np.savez('{}-label-tf.npz'.format(type_str), labels)
 
-    # print("Applying dimensionality reduction...")
-    # data_lsa = preproc.truncate(data_arr)
-    # print("Reduction produced a: {}".format(type(data_lsa)))
-    # print("With shape: {}".format(data_lsa.shape))
+    print("Applying dimensionality reduction...")
+    data_lsa = preproc.truncate(data_arr)
+    print("Reduction produced a: {}".format(type(data_lsa)))
+    print("With shape: {}".format(data_lsa.shape))
 
     print("Applying class re-sampling...")
-    data_rs, label_rs = preproc.balance(data_arr, labels)
-    print("Resampling produced a: {}".format(type(data_rs)))
+    data_rs, label_rs = preproc.balance(data_lsa, labels)
+    print("Re-sampling produced a: {}".format(type(data_rs)))
     print("With shape: {}".format(data_rs.shape))
     print("Label shape: {}".format(label_rs.shape))
 
@@ -94,21 +83,42 @@ def process(df, type_str):
     np.savez('{}-data-rs.npz'.format(type_str), data_rs)
     np.savez('{}-label-rs.npz'.format(type_str), label_rs)
 
+    return data_rs, label_rs
+
+
+def train_sk(data, labels):
+    """
+    Train model set on data
+    :param data: np array of data vectors
+    :param labels: np array of label values
+    :return: Pandas Dataframe of model scores
+    """
+    simple_models = skmodels.SkModels()
+    scores = simple_models.run_models(data, labels)
+    simple_models.save_models('models/sk-models')
+    return scores
+
 
 def main():
-    cuda_check()
+    # Pytorch/CUDA bug https://github.com/pytorch/pytorch/issues/27837
+    torch.autograd.set_detect_anomaly = True
+    collect_env.main()
 
     # import_files()
-    # df = load('merged_tweets')
+    df = load('merged_tweets')
     # df.to_pickle('train-data.zip')
 
     # df = pd.read_pickle('train-data.zip')
-    # df = df.sample(frac=0.01, axis=0)
+    # df = df.sample(frac=0.001, axis=0)
     # df.to_pickle('sample.zip')
 
-    df = pd.read_pickle('sample.zip')
-    process(df, 'train')
-    print("Complete.")
+    # df = pd.read_pickle('sample.zip')
+    data, labels = process(df, 'train')
+    print("Pre-processing complete.")
+
+    print("Running model training...")
+    training_scores = train_sk(data, labels)
+    print(training_scores)
 
 
 if __name__ == '__main__':

@@ -42,7 +42,7 @@ class PreProcessor:
     Instantiate a Flair embedding transformer for text features
     Returns a sparse matrix of features
     """
-    def __init__(self, components=100, jobs=8):
+    def __init__(self, components=1000, jobs=8):
         stopwords = set(corpus.stopwords.words('english'))
         self.mapper = DataFrameMapper([
             (['created_at'], StandardScaler()),
