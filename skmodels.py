@@ -4,7 +4,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_validate
 import numpy as np
 import pandas as pd
-from joblib import dump
+from joblib import dump, load
+from os import path
 
 
 class SkModels:
@@ -12,7 +13,7 @@ class SkModels:
         self.models = [
             ('SVM', NuSVC(gamma='scale')),
             ('Bayes', GaussianNB()),
-            ('Forest', RandomForestClassifier(n_estimators=100)),
+            ('Forest', RandomForestClassifier(n_estimators=100, n_jobs=-1)),
         ]
         self.scoring = {
             'Accuracy': 'accuracy',
@@ -47,6 +48,18 @@ class SkModels:
             'roc_auc'
         ])
 
-    def save_models(self, filepath):
+    def predict(self, data):
+        results = {}
         for name, model in self.models:
+            results[name] = model.predict(data)
+        return results
+
+    def fit_and_save_models(self, filepath, data, labels):
+        for name, model in self.models:
+            model.fit(data, labels)
             dump(model, '{}-{}.joblib'.format(filepath, name))
+
+    def load_models(self, filepath):
+        for name, model in self.models:
+            if path.isfile('{}-{}.joblib'.format(filepath, name)):
+                load('{}-{}.joblib'.format(filepath, name))

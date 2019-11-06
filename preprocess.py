@@ -1,36 +1,33 @@
-from flair.embeddings import WordEmbeddings, FlairEmbeddings, DocumentPoolEmbeddings, Sentence
+from sklearn.base import TransformerMixin
 from sklearn_pandas import DataFrameMapper
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
 from imblearn.combine import SMOTEENN
 from nltk import corpus
-from scipy import sparse
 from sklearn.preprocessing import label_binarize
+import numpy as np
+import spacy
+import torch
+from spacy.compat import cupy
 
 
-class EmbedTransformer:
+class EmbedTransformer(TransformerMixin):
     """
-    Generate document embedding for column using Flair (https://www.aclweb.org/anthology/C18-1139/)
-    using FLAIR framework (https://www.aclweb.org/anthology/N19-4010/)
+    Generate embeddings with spacy implementation of DistilBERT model (https://arxiv.org/abs/1910.01108)
+    Use take average of word embeddings as document embedding
     """
     def __init__(self):
-        glove_embedding = WordEmbeddings('glove')
-        flair_forward_embedding = FlairEmbeddings('news-forward-fast')
-        flair_backward_embedding = FlairEmbeddings('news-backward-fast')
-        self.document_embeddings = DocumentPoolEmbeddings([glove_embedding,
-                                                           flair_forward_embedding,
-                                                           flair_backward_embedding])
+        is_using_gpu = spacy.require_gpu()
+        if is_using_gpu:
+            torch.set_default_tensor_type("torch.cuda.FloatTensor")
+        self.nlp = spacy.load('en_trf_distilbertbaseuncased_lg')
 
-    def generate_embeds(self, text):
-        try:
-            sentence = Sentence(text)
-            self.document_embeddings.embed(sentence)
-            embed = sentence.get_embedding().detach().cpu().numpy()
-        except Exception as e:
-            print("Exception for text value: {}".format(text))
-            print(e)
-        return embed
+    def fit_transform(self, data, **kwargs):
+        new_x = []
+        for doc in self.nlp.pipe(data):
+            new_x.append(cupy.asnumpy(doc.vector))
+        return np.array(new_x)
 
 
 class PreProcessor:
@@ -42,7 +39,7 @@ class PreProcessor:
     Instantiate a Flair embedding transformer for text features
     Returns a sparse matrix of features
     """
-    def __init__(self, components=1000, jobs=8):
+    def __init__(self, jobs=8):
         stopwords = set(corpus.stopwords.words('english'))
         self.mapper = DataFrameMapper([
             (['created_at'], StandardScaler()),
@@ -58,29 +55,22 @@ class PreProcessor:
             ('user_name', TfidfVectorizer(stop_words=stopwords)),
             ('user_screen_name', TfidfVectorizer(stop_words=stopwords)),
             ('user_profile_urls', TfidfVectorizer(stop_words=stopwords)),
+            ('full_text', EmbedTransformer())
         ], sparse=True)
-        self.svd = TruncatedSVD(n_components=components, algorithm='randomized')
+        self.svd = TruncatedSVD(algorithm='randomized')
         self.balancer = SMOTEENN(n_jobs=jobs)
 
     def transform(self, df):
-        new_data = df.copy()
-        labels = label_binarize(new_data.pop('label'), classes=['none', 'astroturf'])
-        full_text = new_data.pop('full_text')
-        embeds = []
-        embedder = EmbedTransformer()
-        texts = full_text.values.tolist()
-        for text in texts:
-            embeds.append(embedder.generate_embeds(text))
-        sp_embeds = sparse.csr_matrix(embeds)
-        vectors = self.mapper.fit_transform(new_data)
-        return sparse.hstack([vectors, sp_embeds], format='csr'), labels
+        labels = label_binarize(df.pop('label'), classes=['none', 'astroturf'])
+        return self.mapper.fit_transform(df), labels
 
-    def truncate(self, data_array):
+    def truncate(self, data_array, components=1000):
         """
         Run feature dimensionality reduction process
         In this case LSA using a randomised sampling methodology (https://arxiv.org/abs/0909.4061)
         Returns a dense array
         """
+        self.svd.n_components = components
         return self.svd.fit_transform(data_array)
 
     def balance(self, data_array, labels):
