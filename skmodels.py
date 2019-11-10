@@ -10,11 +10,11 @@ from os import path
 
 class SkModels:
     def __init__(self):
-        self.models = [
-            ('SVM', NuSVC(gamma='scale')),
-            ('Bayes', GaussianNB()),
-            ('Forest', RandomForestClassifier(n_estimators=100, n_jobs=-1)),
-        ]
+        self.models = {
+            'SVM': NuSVC(gamma='scale'),
+            'Bayes': GaussianNB(),
+            'Forest': RandomForestClassifier(n_estimators=100, n_jobs=-1),
+        }
         self.scoring = {
             'Accuracy': 'accuracy',
             'Precision': 'precision_macro',
@@ -57,9 +57,9 @@ class SkModels:
     def fit_and_save_models(self, filepath, data, labels):
         for name, model in self.models:
             model.fit(data, labels)
-            dump(model, '{}-{}.joblib'.format(filepath, name))
+            dump(model, '{}-{}.gz'.format(filepath, name), compress=3)
 
     def load_models(self, filepath):
         for name, model in self.models:
             if path.isfile('{}-{}.joblib'.format(filepath, name)):
-                load('{}-{}.joblib'.format(filepath, name))
+                self.models[name] = load('{}-{}.gz'.format(filepath, name))

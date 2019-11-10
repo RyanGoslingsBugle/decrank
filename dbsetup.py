@@ -10,6 +10,10 @@ class Importer:
         client = MongoClient()
         self.db = getattr(client, db_name)
 
+    def clear(self, col_name):
+        collection = getattr(self.db, col_name)
+        collection.delete_many({})
+
     def import_tweets_from_file(self, col_name, filename, json_type=False, borked_json=False):
         """
         Read tweet objects from single file and insert into db collection
@@ -19,17 +23,16 @@ class Importer:
         :param borked_json: File is multi-line JSON objects without list separators
         """
         collection = getattr(self.db, col_name)
-        collection.delete_many({})
-        with open(filename, encoding="utf8") as infile:
+        with open(filename, encoding="utf8", mode='r') as infile:
             if json_type:
                 if borked_json:
                     try:
-                        content = "[" + infile.read().strip().replace("\n", "").replace('\r', '').replace("}{", "},{") + "]"
-                        json_list = json.loads(content, strict=False)
-                        for obj in json_list:
+                        content = infile.read().replace('}{', '}abz!!!$|,{')
+                        content_list = content.split('abz!!!$|,')
+                        for str_obj in content_list:
+                            obj = json.loads(str_obj, strict=False)
                             if obj['lang'] in ['en', 'uk']:
-                                if obj['user']['lang'] in ['en', 'uk', None, '', 'und']:
-                                    collection.insert_one(obj)
+                                collection.insert_one(obj)
                     except Exception as e:
                         print(e)
                 else:
@@ -43,8 +46,7 @@ class Importer:
                 reader = csv.DictReader(infile)
                 for row in reader:
                     if row['tweet_language'].lower() in ['en', 'uk']:
-                        if row['account_language'].lower() in ['en', 'uk', None, '', 'und']:
-                            collection.insert_one(row)
+                        collection.insert_one(row)
 
     def import_reddit_from_file(self, col_name, filename, json_type=False):
         """
@@ -54,7 +56,6 @@ class Importer:
         :param json_type: File is in JSON format
         """
         collection = getattr(self.db, col_name)
-        collection.delete_many({})
         if json_type:
             with bz2.open(filename) as infile:
                 for row in infile:

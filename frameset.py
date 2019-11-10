@@ -5,7 +5,7 @@ import pandas as pd
 class Framer:
     def __init__(self, db_name):
         client = MongoClient()
-        self.db = client[db_name]
+        self.db = getattr(client, db_name)
 
     @staticmethod
     def get_from_db(collection):
@@ -31,7 +31,7 @@ class Framer:
         return frame
 
     def get_frame(self, col_name):
-        df = self.get_from_db(self.db[col_name])
+        df = self.get_from_db(getattr(self.db, col_name))
         df = self.frame_set(df)
         return df
 

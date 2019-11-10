@@ -1,9 +1,9 @@
+from imblearn.combine import SMOTEENN
 from sklearn.base import TransformerMixin
 from sklearn_pandas import DataFrameMapper
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
-from imblearn.combine import SMOTEENN
 from nltk import corpus
 from sklearn.preprocessing import label_binarize
 import numpy as np
@@ -36,10 +36,10 @@ class PreProcessor:
     Import dataframe and apply sklearn transformations
     Vectorize (non full text) strings with TF/IDF
     Normalise int values, remove mean and scale to unit variance
-    Instantiate a Flair embedding transformer for text features
+    Instantiate an embedding transformer for message text feature
     Returns a sparse matrix of features
     """
-    def __init__(self, jobs=8):
+    def __init__(self):
         stopwords = set(corpus.stopwords.words('english'))
         self.mapper = DataFrameMapper([
             (['created_at'], StandardScaler()),
@@ -48,17 +48,17 @@ class PreProcessor:
             (['retweet_count'], StandardScaler()),
             (['user_followers_count'], StandardScaler()),
             (['user_following_count'], StandardScaler()),
-            ('hashtags', TfidfVectorizer(stop_words=stopwords)),
-            ('urls', TfidfVectorizer(stop_words=stopwords)),
+            ('hashtags', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
+            ('urls', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
             ('user_description', TfidfVectorizer(stop_words=stopwords)),
-            ('user_location', TfidfVectorizer(stop_words=stopwords)),
-            ('user_name', TfidfVectorizer(stop_words=stopwords)),
-            ('user_screen_name', TfidfVectorizer(stop_words=stopwords)),
-            ('user_profile_urls', TfidfVectorizer(stop_words=stopwords)),
+            ('user_location', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
+            ('user_name', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
+            ('user_screen_name', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
+            ('user_profile_urls', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
             ('full_text', EmbedTransformer())
         ], sparse=True)
         self.svd = TruncatedSVD(algorithm='randomized')
-        self.balancer = SMOTEENN(n_jobs=jobs)
+        self.balancer = SMOTEENN(n_jobs=12)
 
     def transform(self, df):
         labels = label_binarize(df.pop('label'), classes=['none', 'astroturf'])
