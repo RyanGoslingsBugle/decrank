@@ -109,7 +109,7 @@ def process(df, type_str, balance=True):
 
             print("Saving prepared data...")
             joblib.dump(data_rs, 'data/{}-data-rs-{}.gz'.format(type_str, dimensions), compress=3)
-            joblib.dump(label_rs, 'data/{}-label-rs-{}}.gz'.format(type_str, dimensions), compress=3)
+            joblib.dump(label_rs, 'data/{}-label-rs-{}.gz'.format(type_str, dimensions), compress=3)
             del data_rs, label_rs
 
 
