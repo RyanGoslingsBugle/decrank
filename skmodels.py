@@ -29,7 +29,7 @@ class SkModels:
 
     def run_models(self, data, labels):
         scores = {}
-        for name, model in self.models:
+        for name, model in self.models.items():
             scores[name] = self.validate(model, data, labels)
 
         avg_scores = {}
@@ -50,16 +50,16 @@ class SkModels:
 
     def predict(self, data):
         results = {}
-        for name, model in self.models:
+        for name, model in self.models.items():
             results[name] = model.predict(data)
         return results
 
     def fit_and_save_models(self, filepath, data, labels):
-        for name, model in self.models:
+        for name, model in self.models.items():
             model.fit(data, labels)
             dump(model, '{}-{}.gz'.format(filepath, name), compress=3)
 
     def load_models(self, filepath):
-        for name, model in self.models:
+        for name, model in self.models.items():
             if path.isfile('{}-{}.joblib'.format(filepath, name)):
                 self.models[name] = load('{}-{}.gz'.format(filepath, name))

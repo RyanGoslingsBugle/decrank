@@ -48,13 +48,13 @@ class PreProcessor:
             (['retweet_count'], StandardScaler()),
             (['user_followers_count'], StandardScaler()),
             (['user_following_count'], StandardScaler()),
-            ('hashtags', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
-            ('urls', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
-            ('user_description', TfidfVectorizer(stop_words=stopwords)),
-            ('user_location', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
-            ('user_name', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
-            ('user_screen_name', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
-            ('user_profile_urls', TfidfVectorizer(stop_words=stopwords, max_features=1000)),
+            ('hashtags', TfidfVectorizer(stop_words=stopwords, max_features=1_000)),
+            ('urls', TfidfVectorizer(stop_words=stopwords, max_features=1_000)),
+            ('user_description', TfidfVectorizer(stop_words=stopwords, max_features=10_000)),
+            ('user_location', TfidfVectorizer(stop_words=stopwords, max_features=1_000)),
+            ('user_name', TfidfVectorizer(stop_words=stopwords, max_features=1_000)),
+            ('user_screen_name', TfidfVectorizer(stop_words=stopwords, max_features=1_000)),
+            ('user_profile_urls', TfidfVectorizer(stop_words=stopwords, max_features=1_000)),
             ('full_text', EmbedTransformer())
         ], sparse=True)
         self.svd = TruncatedSVD(algorithm='randomized')

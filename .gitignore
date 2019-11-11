@@ -6,3 +6,6 @@ __pycache__
 *.pyc
 models/
 venv/
+*.ipynb
+.ipynb_checkpoints
+results/

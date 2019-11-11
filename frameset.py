@@ -28,6 +28,8 @@ class Framer:
         frame['user_location'] = frame['user_location'].astype(str)
         frame['user_name'] = frame['user_name'].astype(str)
         frame['user_screen_name'] = frame['user_screen_name'].astype(str)
+        frame['user_description'] = frame['user_description'].astype(str)
+        frame['full_text'] = frame['full_text'].astype(str)
         return frame
 
     def get_frame(self, col_name):
