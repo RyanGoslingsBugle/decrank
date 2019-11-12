@@ -1,11 +1,10 @@
 from os import listdir
-from pprint import pprint
 import datetime
 
 import joblib
 import pandas as pd
 from scipy import sparse
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 
 import dbsetup
 import frameset
@@ -113,103 +112,107 @@ def process(df, type_str, dimensions, balance=True):
             del data_rs, label_rs
 
 
-def train_sk(data, dimension, labels):
-    """
-    Train and validate sklearn model set
-    :param dimension: string representation of x-axis length of input vector
-    :param data: np array of data input vectors
-    :param labels: np array of label values
-    :return: Pandas Dataframe of model scores
-    """
-    simple_models = skmodels.SkModels()
-    scores = simple_models.run_models(data, labels)
-    simple_models.fit_and_save_models('models/sk-models-{}'.format(dimension), data, labels)
-    print("Training scores for data with dimensions: {}".format(data.shape))
-    pprint(scores)
-    now = datetime.datetime.now()
-    scores.to_csv('results/{}-train-skmodels-{}-results.csv'.format(now.strftime("%Y-%m-%d"), dimension),
-                  index=False)
-    return scores
-
-
-def predict_sk(data, dimension, labels):
+def predict(data, dimension, labels, model_type='sk-models'):
     """
     Perform predictions with sklearn models
+    :param model_type:
     :param labels: np array of true label values
     :param dimension: string representation of x-axis dimension of input vectors
     :param data: numpy array of model input vectors
     :return: dictionary of predicted labels for test data (keys = model names, values = list of label values)
     """
-    simple_models = skmodels.SkModels()
-    simple_models.load_models('models/sk-models-{}'.format(dimension))
-    predictions = simple_models.predict(data)
-    scores = classification_report(labels, predictions, target_names=['none', 'astroturf'])
-    pprint(scores)
-    now = datetime.datetime.now()
-    scores.to_csv('results/{}-test-skmodels-{}-results.csv'.format(now.strftime("%Y-%m-%d"), dimension),
-                  index=False)
+    if model_type == 'sk-models':
+        models = skmodels.SkModels()
+    elif model_type == 'tf-models':
+        models = tfmodels.TFModels(dimension)
+    else:
+        raise KeyError('Model type not found.')
+    models.load_models('models/{}-{}'.format(model_type, dimension))
+    predictions, probs = models.predict(data)
+    for name, scores in predictions.items():
+        report = classification_report(labels, scores, target_names=['none', 'astroturf'])
+        c_matrix = confusion_matrix(labels, scores)
+        print(report)
+        print(c_matrix)
+        now = datetime.datetime.now()
+        with open('results/{}-test-{}-{}-{}-results.txt'.format(now.strftime("%Y-%m-%d"), model_type, name, dimension),
+                  mode='w', encoding='utf-8') as f:
+            f.write(report)
+            f.write(c_matrix)
+            if model_type == 'sk-models':
+                roc_auc = roc_auc_score(labels, probs[name])
+                print("ROC_AUC: {}".format(roc_auc))
+                f.write("ROC_AUC: {}".format(roc_auc))
     return predictions
 
 
-def train_tf(data, dimension, labels):
-    tf_models = tfmodels.TFModels(dimension)
-    scores = tf_models.run_models(data, labels)
-    tf_models.save_models('models/tf-models-{}'.format(dimension))
-    print("Training scores for data with dimensions: {}".format(data.shape))
-    for name, frame in scores.items():
-        print("Model type: {}".format(name))
-        pprint(frame)
+def train(data, dimension, labels, model_type='sk-models'):
+    """
+    Train and validate model set
+    :param model_type:
+    :param dimension: string representation of x-axis length of input vector
+    :param data: np array of data input vectors
+    :param labels: np array of label values
+    :return: Pandas Dataframe of model scores
+    """
+    if model_type == 'sk-models':
+        models = skmodels.SkModels()
+        scores = models.run_models(data, labels)
+        models.save_models('models/{}-{}'.format(model_type, dimension), data, labels)
+        print("Training scores for data with dimensions: {}".format(data.shape))
+        print(scores)
         now = datetime.datetime.now()
-        frame.to_csv('results/{}-train-tfmodels-{}-{}-results.csv'.format(now.strftime("%Y-%m-%d"), name, dimension),
-                     index=False)
+        scores.to_csv('results/{}-train-{}-{}-results.csv'
+                      .format(now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
+    elif model_type == 'tf-models':
+        models = tfmodels.TFModels(dimension)
+        scores = models.run_models(data, labels)
+        models.save_models('models/{}-{}'.format(model_type, dimension))
+        print("Training scores for data with dimensions: {}".format(data.shape))
+        for name, frame in scores.items():
+            print("Model type: {}".format(name))
+            print(frame)
+            now = datetime.datetime.now()
+            frame.to_csv('results/{}-train-{}-{}-{}-results.csv'
+                         .format(now.strftime("%Y-%m-%d"), model_type, name, dimension), index=False)
+    else:
+        raise KeyError('Model type not found.')
     return scores
 
 
-def predict_tf(data, dimension, labels):
-    tf_models = tfmodels.TFModels(dimension)
-    tf_models.load_models('models/tf-models-{}'.format(dimension))
-    predictions = tf_models.predict(data)
-    scores = classification_report(labels, predictions, target_names=['none', 'astroturf'])
-    pprint(scores)
-    now = datetime.datetime.now()
-    scores.to_csv('results/{}-test-tfmodels-{}-results.csv'.format(now.strftime("%Y-%m-%d"), dimension),
-                  index=False)
-    return predictions
-
-
 def main():
-    # print("Loading data...")
-    # import_files()
+    print("Loading data...")
+    import_files()
 
-    # df = load('merged_tweets')
-    # df.to_pickle('train-data.zip')
+    df = load('merged_tweets')
+    df.to_pickle('train-data.zip')
     # df = pd.read_pickle('train-data.zip')
-    # df = df.sample(frac=0.01)
+    df = df.sample(frac=0.01)
 
-    # tdf = load('recent_merged_tweets')
-    # tdf.to_pickle('test-data.zip')
+    tdf = load('recent_merged_tweets')
+    tdf.to_pickle('test-data.zip')
     # tdf = pd.read_pickle('test-data.zip')
-    # tdf = tdf.sample(frac=0.01)
+    tdf = tdf.sample(frac=0.01)
 
-    # print("Start pre-processing...")
+    print("Start pre-processing...")
     dimensions = [100, 500, 1_000]
-    # process(df, 'train', dimensions)
-    # process(tdf, 'test', dimensions, False)
-    # print("Pre-processing complete.")
+    process(df, 'train', dimensions)
+    process(tdf, 'test', dimensions, False)
+    print("Pre-processing complete.")
 
     print("Running model training...")
     for dimension in dimensions:
         data = joblib.load('data/train-data-rs-{}.gz'.format(dimension))
         labels = joblib.load('data/train-label-rs-{}.gz'.format(dimension))
-        train_sk(data, dimension, labels)
-        train_tf(data, dimension, labels)
+        train(data, dimension, labels)
+        train(data, dimension, labels, 'tf-models')
 
     print("Making predictions...")
     for dimension in dimensions:
         data = joblib.load('data/test-data-dm-{}.gz'.format(dimension))
         labels = joblib.load('data/test-label-tf.gz'.format(dimension))
-        predict_sk(data, dimension, labels)
-        predict_tf(data, dimension, labels)
+        predict(data, dimension, labels)
+        predict(data, dimension, labels, 'tf-models')
 
 
 if __name__ == '__main__':
