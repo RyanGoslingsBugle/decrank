@@ -1,6 +1,6 @@
 from sklearn.svm import NuSVC
 from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier
 from sklearn.model_selection import cross_validate
 import numpy as np
 import pandas as pd
@@ -11,7 +11,7 @@ from os import path
 class SkModels:
     def __init__(self):
         self.models = {
-            'SVM': NuSVC(gamma='scale', probability=True),
+            'SVM': BaggingClassifier(NuSVC(gamma='scale'), bootstrap=False, max_samples=1.0/20, n_estimators=20, n_jobs=-1),
             'Bayes': GaussianNB(),
             'Forest': RandomForestClassifier(n_estimators=100, n_jobs=-1),
         }
@@ -50,11 +50,9 @@ class SkModels:
 
     def predict(self, data):
         results = {}
-        probs = {}
         for name, model in self.models.items():
             results[name] = model.predict(data)
-            probs[name] = model.predict_proba(data)
-        return results, probs
+        return results
 
     def save_models(self, filepath, data, labels):
         for name, model in self.models.items():

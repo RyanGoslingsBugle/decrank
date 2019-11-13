@@ -1,7 +1,7 @@
 from os import path
 
 from keras.models import Sequential, load_model
-from keras.layers import Dense, Dropout, Activation, Reshape
+from keras.layers import Dense, Dropout, Activation, Reshape, Bidirectional, LSTM
 from keras.layers import Conv1D, GlobalMaxPooling1D
 from keras.callbacks import Callback, EarlyStopping
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
@@ -50,7 +50,7 @@ class Metrics(Callback):
         return
 
 
-class CNN:
+class CNNModel:
     def __init__(self, input_length, output_size=1, filter_length=50, hidden_size=128, kernel_size=2):
         self.model = Sequential()
         self.model.add(Reshape((1, input_length), input_shape=(input_length, )))
@@ -60,23 +60,29 @@ class CNN:
         self.model.add(Dense(hidden_size))
         self.model.add(Dropout(0.2))
         self.model.add(Activation('relu'))
-        self.model.add(Dense(output_size))
-        self.model.add(Activation('sigmoid'))
+        self.model.add(Dense(output_size, activation='sigmoid'))
         self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 
-class LSTM:
-    pass
+class LSTMModel:
+    def __init__(self, input_length, output_size=1, hidden_size=128):
+        self.model = Sequential()
+        self.model.add(Reshape((1, input_length), input_shape=(input_length,)))
+        self.model.add(Bidirectional(LSTM(hidden_size)))
+        self.model.add(Dropout(0.3))
+        self.model.add(Dense(output_size, activation='sigmoid'))
+        self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 
 class TFModels:
-    def __init__(self, input_length, batch_size=32, epochs=10):
+    def __init__(self, input_length, batch_size=32, epochs=30):
         self.batch_size = batch_size
         self.epochs = epochs
         self.metrics = Metrics()
         self.early_stop = EarlyStopping(monitor='val_loss', min_delta=0, patience=3, verbose=1)
         self.models = {
-            'CNN': CNN(input_length).model
+            'CNN': CNNModel(input_length).model,
+            'LSTM': LSTMModel(input_length).model,
         }
 
     def run_models(self, data, labels):
@@ -99,12 +105,10 @@ class TFModels:
     def load_models(self, filepath):
         for name, model in self.models.items():
             if path.isfile('{}-{}.h5'.format(filepath, name)):
-                self.models[name] = load_model(filepath='{}-{}.h5'.format(filepath, name))
+                self.models[name] = load_model('{}-{}.h5'.format(filepath, name))
 
     def predict(self, data):
         results = {}
-        probs = {}
         for name, model in self.models.items():
-            results[name] = model.predict(data,
-                                          batch_size=self.batch_size)
-        return results, probs
+            results[name] = model.predict_classes(data, batch_size=self.batch_size)
+        return results

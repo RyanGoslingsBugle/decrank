@@ -3,6 +3,8 @@ import datetime
 
 import joblib
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from scipy import sparse
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 
@@ -128,21 +130,27 @@ def predict(data, dimension, labels, model_type='sk-models'):
     else:
         raise KeyError('Model type not found.')
     models.load_models('models/{}-{}'.format(model_type, dimension))
-    predictions, probs = models.predict(data)
+    predictions = models.predict(data)
     for name, scores in predictions.items():
+        print("Test scores for {} model, data dimensions: {}".format(name, data.shape))
         report = classification_report(labels, scores, target_names=['none', 'astroturf'])
         c_matrix = confusion_matrix(labels, scores)
-        print(report)
-        print(c_matrix)
+        new_ax = plt.subplot(label='{}-{}'.format(name, dimension))
+        cmplt = sns.heatmap(c_matrix, annot=True, fmt='d', ax=new_ax, cbar=None, cmap='Greens',
+                            xticklabels=['none', 'astroturf'], yticklabels=['none', 'astroturf'])
+        new_ax.set_xlabel('Predicted labels')
+        new_ax.set_ylabel('True labels')
+        new_ax.set_title('Confusion matrix for {} model at {} dimensions'.format(name, dimension))
         now = datetime.datetime.now()
+        cmplt.get_figure().savefig('results/{}-test-{}-{}-{}-cmatrix.png'
+                                   .format(now.strftime("%Y-%m-%d"), model_type, name, dimension))
+        roc_auc = roc_auc_score(labels, scores)
+        print(report)
+        print("ROC_AUC: {}".format(roc_auc))
         with open('results/{}-test-{}-{}-{}-results.txt'.format(now.strftime("%Y-%m-%d"), model_type, name, dimension),
                   mode='w', encoding='utf-8') as f:
             f.write(report)
-            f.write(c_matrix)
-            if model_type == 'sk-models':
-                roc_auc = roc_auc_score(labels, probs[name])
-                print("ROC_AUC: {}".format(roc_auc))
-                f.write("ROC_AUC: {}".format(roc_auc))
+            f.write("ROC_AUC: {}".format(roc_auc))
     return predictions
 
 
@@ -181,21 +189,22 @@ def train(data, dimension, labels, model_type='sk-models'):
 
 
 def main():
-    print("Loading data...")
-    import_files()
+    dimensions = [100, 500, 1_000]
 
-    df = load('merged_tweets')
-    df.to_pickle('train-data.zip')
-    # df = pd.read_pickle('train-data.zip')
-    df = df.sample(frac=0.01)
+    # print("Loading data...")
+    # import_files()
+    #
+    # df = load('merged_tweets')
+    # df.to_pickle('train-data.zip')
+    df = pd.read_pickle('train-data.zip')
+    df = df.sample(frac=0.1)
 
-    tdf = load('recent_merged_tweets')
-    tdf.to_pickle('test-data.zip')
-    # tdf = pd.read_pickle('test-data.zip')
-    tdf = tdf.sample(frac=0.01)
+    # tdf = load('recent_merged_tweets')
+    # tdf.to_pickle('test-data.zip')
+    tdf = pd.read_pickle('test-data.zip')
+    tdf = tdf.sample(frac=0.1)
 
     print("Start pre-processing...")
-    dimensions = [100, 500, 1_000]
     process(df, 'train', dimensions)
     process(tdf, 'test', dimensions, False)
     print("Pre-processing complete.")
