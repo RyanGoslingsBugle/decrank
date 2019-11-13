@@ -6,7 +6,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import sparse
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, precision_recall_fscore_support, \
+    accuracy_score
 
 import dbsetup
 import frameset
@@ -131,26 +132,30 @@ def predict(data, dimension, labels, model_type='sk-models'):
         raise KeyError('Model type not found.')
     models.load_models('models/{}-{}'.format(model_type, dimension))
     predictions = models.predict(data)
+    report = {}
     for name, scores in predictions.items():
         print("Test scores for {} model, data dimensions: {}".format(name, data.shape))
-        report = classification_report(labels, scores, target_names=['none', 'astroturf'])
+        accuracy = accuracy_score(labels, scores)
+        precision, recall, f_score, support = precision_recall_fscore_support(labels, scores, average='macro')
+        roc_auc = roc_auc_score(labels, scores, average='macro')
+        report[name] = [accuracy, precision, f_score, roc_auc]
+
         c_matrix = confusion_matrix(labels, scores)
         new_ax = plt.subplot(label='{}-{}'.format(name, dimension))
-        cmplt = sns.heatmap(c_matrix, annot=True, fmt='d', ax=new_ax, cbar=None, cmap='Greens',
-                            xticklabels=['none', 'astroturf'], yticklabels=['none', 'astroturf'])
+        cm_plt = sns.heatmap(c_matrix, annot=True, fmt='d', ax=new_ax, cbar=None, cmap='Greens',
+                             xticklabels=['none', 'astroturf'], yticklabels=['none', 'astroturf'])
         new_ax.set_xlabel('Predicted labels')
         new_ax.set_ylabel('True labels')
         new_ax.set_title('Confusion matrix for {} model at {} dimensions'.format(name, dimension))
         now = datetime.datetime.now()
-        cmplt.get_figure().savefig('results/{}-test-{}-{}-{}-cmatrix.png'
+        cm_plt.get_figure().savefig('results/{}-test-{}-{}-{}-cmatrix.png'
                                    .format(now.strftime("%Y-%m-%d"), model_type, name, dimension))
-        roc_auc = roc_auc_score(labels, scores)
-        print(report)
-        print("ROC_AUC: {}".format(roc_auc))
-        with open('results/{}-test-{}-{}-{}-results.txt'.format(now.strftime("%Y-%m-%d"), model_type, name, dimension),
-                  mode='w', encoding='utf-8') as f:
-            f.write(report)
-            f.write("ROC_AUC: {}".format(roc_auc))
+
+    pd_report = pd.DataFrame.from_dict(report, orient='index',
+                                       columns=['accuracy', 'precision', 'f1-score', 'roc_auc'])
+    now = datetime.datetime.now()
+    pd_report.to_csv('results/{}-test-{}-{}-results.csv'
+                     .format(now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
     return predictions
 
 
@@ -180,7 +185,18 @@ def train(data, dimension, labels, model_type='sk-models'):
         for name, frame in scores.items():
             print("Model type: {}".format(name))
             print(frame)
+
+            plt.figure()
+            plt.plot(frame['accuracy'], label='Accuracy')
+            plt.plot(frame['recall'], label='Recall')
+            plt.plot(frame['precision'], label='Precision')
+            plt.plot(frame['f1-score'], label='F1 Score')
+            plt.plot(frame['roc_auc'], label='ROC AUC')
+            plt.legend(loc='best')
+
             now = datetime.datetime.now()
+            plt.savefig('results/{}-train-{}-{}-{}-history.png'
+                        .format(now.strftime("%Y-%m-%d"), model_type, name, dimension))
             frame.to_csv('results/{}-train-{}-{}-{}-results.csv'
                          .format(now.strftime("%Y-%m-%d"), model_type, name, dimension), index=False)
     else:
@@ -191,16 +207,16 @@ def train(data, dimension, labels, model_type='sk-models'):
 def main():
     dimensions = [100, 500, 1_000]
 
-    # print("Loading data...")
-    # import_files()
-    #
-    # df = load('merged_tweets')
-    # df.to_pickle('train-data.zip')
+    print("Loading data...")
+    import_files()
+
+    df = load('merged_tweets')
+    df.to_pickle('train-data.zip')
     df = pd.read_pickle('train-data.zip')
     df = df.sample(frac=0.1)
 
-    # tdf = load('recent_merged_tweets')
-    # tdf.to_pickle('test-data.zip')
+    tdf = load('recent_merged_tweets')
+    tdf.to_pickle('test-data.zip')
     tdf = pd.read_pickle('test-data.zip')
     tdf = tdf.sample(frac=0.1)
 
