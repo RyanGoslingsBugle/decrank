@@ -6,8 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import sparse
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, precision_recall_fscore_support, \
-    accuracy_score
+from sklearn.metrics import confusion_matrix, roc_auc_score, precision_recall_fscore_support, accuracy_score
 
 import dbsetup
 import frameset
@@ -117,8 +116,8 @@ def process(df, type_str, dimensions, balance=True):
 
 def predict(data, dimension, labels, model_type='sk-models'):
     """
-    Perform predictions with sklearn models
-    :param model_type:
+    Perform predictions with trained models
+    :param model_type: string name of model class to load
     :param labels: np array of true label values
     :param dimension: string representation of x-axis dimension of input vectors
     :param data: numpy array of model input vectors
@@ -132,13 +131,14 @@ def predict(data, dimension, labels, model_type='sk-models'):
         raise KeyError('Model type not found.')
     models.load_models('models/{}-{}'.format(model_type, dimension))
     predictions = models.predict(data)
+    del models
     report = {}
     for name, scores in predictions.items():
         print("Test scores for {} model, data dimensions: {}".format(name, data.shape))
         accuracy = accuracy_score(labels, scores)
         precision, recall, f_score, support = precision_recall_fscore_support(labels, scores, average='macro')
         roc_auc = roc_auc_score(labels, scores, average='macro')
-        report[name] = [accuracy, precision, f_score, roc_auc]
+        report[name] = [accuracy, precision, recall, f_score, roc_auc]
 
         c_matrix = confusion_matrix(labels, scores)
         new_ax = plt.subplot(label='{}-{}'.format(name, dimension))
@@ -149,20 +149,20 @@ def predict(data, dimension, labels, model_type='sk-models'):
         new_ax.set_title('Confusion matrix for {} model at {} dimensions'.format(name, dimension))
         now = datetime.datetime.now()
         cm_plt.get_figure().savefig('results/{}-test-{}-{}-{}-cmatrix.png'
-                                   .format(now.strftime("%Y-%m-%d"), model_type, name, dimension))
+                                    .format(now.strftime("%Y-%m-%d"), model_type, name, dimension))
 
     pd_report = pd.DataFrame.from_dict(report, orient='index',
-                                       columns=['accuracy', 'precision', 'f1-score', 'roc_auc'])
+                                       columns=['accuracy', 'precision', 'recall', 'f1-score', 'roc_auc'])
     now = datetime.datetime.now()
     pd_report.to_csv('results/{}-test-{}-{}-results.csv'
                      .format(now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
-    return predictions
+    del predictions
 
 
 def train(data, dimension, labels, model_type='sk-models'):
     """
     Train and validate model set
-    :param model_type:
+    :param model_type: string name of model class to load
     :param dimension: string representation of x-axis length of input vector
     :param data: np array of data input vectors
     :param labels: np array of label values
@@ -172,6 +172,7 @@ def train(data, dimension, labels, model_type='sk-models'):
         models = skmodels.SkModels()
         scores = models.run_models(data, labels)
         models.save_models('models/{}-{}'.format(model_type, dimension), data, labels)
+        del models
         print("Training scores for data with dimensions: {}".format(data.shape))
         print(scores)
         now = datetime.datetime.now()
@@ -181,15 +182,24 @@ def train(data, dimension, labels, model_type='sk-models'):
         models = tfmodels.TFModels(dimension)
         scores = models.run_models(data, labels)
         models.save_models('models/{}-{}'.format(model_type, dimension))
+        del models
         print("Training scores for data with dimensions: {}".format(data.shape))
+        report = {}
         for name, frame in scores.items():
             print("Model type: {}".format(name))
             print(frame)
 
+            report[name] = [frame['accuracy'].iloc[-1],
+                            frame['precision'].iloc[-1],
+                            frame['recall'].iloc[-1],
+                            frame['f1-score'].iloc[-1],
+                            frame['roc_auc'].iloc[-1],
+                            ]
+
             plt.figure()
             plt.plot(frame['accuracy'], label='Accuracy')
-            plt.plot(frame['recall'], label='Recall')
             plt.plot(frame['precision'], label='Precision')
+            plt.plot(frame['recall'], label='Recall')
             plt.plot(frame['f1-score'], label='F1 Score')
             plt.plot(frame['roc_auc'], label='ROC AUC')
             plt.legend(loc='best')
@@ -199,31 +209,37 @@ def train(data, dimension, labels, model_type='sk-models'):
                         .format(now.strftime("%Y-%m-%d"), model_type, name, dimension))
             frame.to_csv('results/{}-train-{}-{}-{}-results.csv'
                          .format(now.strftime("%Y-%m-%d"), model_type, name, dimension), index=False)
+        pd_report = pd.DataFrame.from_dict(report, orient='index',
+                                           columns=['accuracy', 'precision', 'recall', 'f1-score', 'roc_auc'])
+        now = datetime.datetime.now()
+        pd_report.to_csv('results/{}-train-{}-{}-results.csv'
+                         .format(now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
+
     else:
         raise KeyError('Model type not found.')
-    return scores
+    del scores
 
 
 def main():
     dimensions = [100, 500, 1_000]
 
-    print("Loading data...")
-    import_files()
-
-    df = load('merged_tweets')
-    df.to_pickle('train-data.zip')
-    df = pd.read_pickle('train-data.zip')
-    df = df.sample(frac=0.1)
-
-    tdf = load('recent_merged_tweets')
-    tdf.to_pickle('test-data.zip')
-    tdf = pd.read_pickle('test-data.zip')
-    tdf = tdf.sample(frac=0.1)
-
-    print("Start pre-processing...")
-    process(df, 'train', dimensions)
-    process(tdf, 'test', dimensions, False)
-    print("Pre-processing complete.")
+    # print("Loading data...")
+    # import_files()
+    #
+    # df = load('merged_tweets')
+    # df.to_pickle('train-data.zip')
+    # df = pd.read_pickle('train-data.zip')
+    # df = df.sample(frac=0.1)
+    #
+    # tdf = load('recent_merged_tweets')
+    # tdf.to_pickle('test-data.zip')
+    # tdf = pd.read_pickle('test-data.zip')
+    # tdf = tdf.sample(frac=0.1)
+    #
+    # print("Start pre-processing...")
+    # process(df, 'train', dimensions)
+    # process(tdf, 'test', dimensions, False)
+    # print("Pre-processing complete.")
 
     print("Running model training...")
     for dimension in dimensions:
@@ -231,6 +247,7 @@ def main():
         labels = joblib.load('data/train-label-rs-{}.gz'.format(dimension))
         train(data, dimension, labels)
         train(data, dimension, labels, 'tf-models')
+        del data, labels
 
     print("Making predictions...")
     for dimension in dimensions:
@@ -238,6 +255,7 @@ def main():
         labels = joblib.load('data/test-label-tf.gz'.format(dimension))
         predict(data, dimension, labels)
         predict(data, dimension, labels, 'tf-models')
+        del data, labels
 
 
 if __name__ == '__main__':

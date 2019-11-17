@@ -1,7 +1,7 @@
-from sklearn.svm import NuSVC
+from sklearn.linear_model import SGDClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import RandomForestClassifier, BaggingClassifier
-from sklearn.model_selection import cross_validate
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_validate, StratifiedKFold
 import numpy as np
 import pandas as pd
 from joblib import dump, load
@@ -11,9 +11,9 @@ from os import path
 class SkModels:
     def __init__(self):
         self.models = {
-            'SVM': BaggingClassifier(NuSVC(gamma='scale'), bootstrap=False, max_samples=1.0/20, n_estimators=20, n_jobs=-1),
+            'SGD': SGDClassifier(random_state=1, max_iter=10_000, verbose=1, early_stopping=True, n_jobs=-1),
             'Bayes': GaussianNB(),
-            'Forest': RandomForestClassifier(n_estimators=100, n_jobs=-1),
+            'Forest': RandomForestClassifier(verbose=1, n_estimators=100, n_jobs=-1),
         }
         self.scoring = {
             'Accuracy': 'accuracy',
@@ -24,8 +24,10 @@ class SkModels:
         }
 
     def validate(self, model, data, labels):
-        return cross_validate(model, data, labels, cv=4, scoring=self.scoring,
-                              return_train_score=False, n_jobs=-1, return_estimator=False)
+        splitter = StratifiedKFold(n_splits=4, random_state=1)
+        return cross_validate(model, data, labels, cv=splitter, scoring=self.scoring,
+                              return_train_score=False, n_jobs=-1,
+                              return_estimator=False, error_score=np.nan)
 
     def run_models(self, data, labels):
         scores = {}
