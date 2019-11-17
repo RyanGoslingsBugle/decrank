@@ -63,29 +63,31 @@ def load(collection):
     return df
 
 
-def do_transforms(df, type_str, preprocessor):
+def do_transforms(df, type_str, frac_str, preprocessor):
     print("Applying transformations to {} set...".format(type_str))
     data_arr, labels = preprocessor.transform(df)
     print("Transformation produced a: {}".format(type(data_arr)))
     print("With shape: {}".format(data_arr.shape))
+
     print("Saving array of transformed values...")
-    sparse.save_npz('data/{}-data-tf.npz'.format(type_str), data_arr)
-    joblib.dump(labels, 'data/{}-label-tf.gz'.format(type_str), compress=3)
+    sparse.save_npz('data/{}/{}-data-tf.npz'.format(frac_str, type_str), data_arr)
+    joblib.dump(labels, 'data/{}/{}-label-tf.gz'.format(frac_str, type_str), compress=3)
     del df
 
     return data_arr, labels
 
 
-def process(df, type_str, dimensions, balance=True):
+def process(df, frac_str, type_str, dimensions, balance=True):
     """
     Apply data transformations/dimensionality reduction
+    :param frac_str: string denoting percentage of dataset operated on
     :param dimensions: List of int values to reduce dimensions to
     :param balance: Boolean apply class re-sampling to resolve imbalance
     :type df: Pandas dataframe
     :type type_str: training or test data label
     """
     preprocessor = preprocess.PreProcessor()
-    data_arr, labels = do_transforms(df, type_str, preprocessor)
+    data_arr, labels = do_transforms(df, type_str, frac_str, preprocessor)
 
     for dimension in dimensions:
         print("Applying dimensionality reduction...")
@@ -94,7 +96,7 @@ def process(df, type_str, dimensions, balance=True):
         print("With shape: {}".format(data_lsa.shape))
 
         print("Saving reduced data...")
-        joblib.dump(data_lsa, 'data/{}-data-dm-{}.gz'.format(type_str, dimension), compress=3)
+        joblib.dump(data_lsa, 'data/{}/{}-data-dm-{}.gz'.format(frac_str, type_str, dimension), compress=3)
         del data_lsa
 
     del data_arr
@@ -102,21 +104,22 @@ def process(df, type_str, dimensions, balance=True):
     if balance:
         for dimension in dimensions:
             print("Applying class re-sampling to array with dimensions: {}...".format(dimension))
-            data_arr = joblib.load('data/{}-data-dm-{}.gz'.format(type_str, dimension))
+            data_arr = joblib.load('data/{}/{}-data-dm-{}.gz'.format(frac_str, type_str, dimension))
             data_rs, label_rs = preprocessor.balance(data_arr, labels)
             print("Re-sampling produced a: {}".format(type(data_rs)))
             print("With shape: {}".format(data_rs.shape))
             print("Label shape: {}".format(label_rs.shape))
 
             print("Saving prepared data...")
-            joblib.dump(data_rs, 'data/{}-data-rs-{}.gz'.format(type_str, dimension), compress=3)
-            joblib.dump(label_rs, 'data/{}-label-rs-{}.gz'.format(type_str, dimension), compress=3)
+            joblib.dump(data_rs, 'data/{}/{}-data-rs-{}.gz'.format(frac_str, type_str, dimension), compress=3)
+            joblib.dump(label_rs, 'data/{}/{}-label-rs-{}.gz'.format(frac_str, type_str, dimension), compress=3)
             del data_rs, label_rs
 
 
-def predict(data, dimension, labels, model_type='sk-models'):
+def predict(data, dimension, labels, frac_str, model_type='sk-models'):
     """
     Perform predictions with trained models
+    :param frac_str: string denoting percentage of dataset operated on
     :param model_type: string name of model class to load
     :param labels: np array of true label values
     :param dimension: string representation of x-axis dimension of input vectors
@@ -129,7 +132,7 @@ def predict(data, dimension, labels, model_type='sk-models'):
         models = tfmodels.TFModels(dimension)
     else:
         raise KeyError('Model type not found.')
-    models.load_models('models/{}-{}'.format(model_type, dimension))
+    models.load_models('models/{}/{}-{}'.format(frac_str, model_type, dimension))
     predictions = models.predict(data)
     del models
     report = {}
@@ -148,20 +151,21 @@ def predict(data, dimension, labels, model_type='sk-models'):
         new_ax.set_ylabel('True labels')
         new_ax.set_title('Confusion matrix for {} model at {} dimensions'.format(name, dimension))
         now = datetime.datetime.now()
-        cm_plt.get_figure().savefig('results/{}-test-{}-{}-{}-cmatrix.png'
-                                    .format(now.strftime("%Y-%m-%d"), model_type, name, dimension))
+        cm_plt.get_figure().savefig('results/{}/{}-test-{}-{}-{}-cmatrix.png'
+                                    .format(frac_str, now.strftime("%Y-%m-%d"), model_type, name, dimension))
 
     pd_report = pd.DataFrame.from_dict(report, orient='index',
                                        columns=['accuracy', 'precision', 'recall', 'f1-score', 'roc_auc'])
     now = datetime.datetime.now()
-    pd_report.to_csv('results/{}-test-{}-{}-results.csv'
-                     .format(now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
+    pd_report.to_csv('results/{}/{}-test-{}-{}-results.csv'
+                     .format(frac_str, now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
     del predictions
 
 
-def train(data, dimension, labels, model_type='sk-models'):
+def train(data, dimension, labels, frac_str, model_type='sk-models'):
     """
     Train and validate model set
+    :param frac_str: string denoting percentage of dataset operated on
     :param model_type: string name of model class to load
     :param dimension: string representation of x-axis length of input vector
     :param data: np array of data input vectors
@@ -171,17 +175,17 @@ def train(data, dimension, labels, model_type='sk-models'):
     if model_type == 'sk-models':
         models = skmodels.SkModels()
         scores = models.run_models(data, labels)
-        models.save_models('models/{}-{}'.format(model_type, dimension), data, labels)
+        models.save_models('models/{}/{}-{}'.format(frac_str, model_type, dimension), data, labels)
         del models
         print("Training scores for data with dimensions: {}".format(data.shape))
         print(scores)
         now = datetime.datetime.now()
-        scores.to_csv('results/{}-train-{}-{}-results.csv'
-                      .format(now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
+        scores.to_csv('results/{}/{}-train-{}-{}-results.csv'
+                      .format(frac_str, now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
     elif model_type == 'tf-models':
         models = tfmodels.TFModels(dimension)
         scores = models.run_models(data, labels)
-        models.save_models('models/{}-{}'.format(model_type, dimension))
+        models.save_models('models/{}/{}-{}'.format(frac_str, model_type, dimension))
         del models
         print("Training scores for data with dimensions: {}".format(data.shape))
         report = {}
@@ -205,15 +209,15 @@ def train(data, dimension, labels, model_type='sk-models'):
             plt.legend(loc='best')
 
             now = datetime.datetime.now()
-            plt.savefig('results/{}-train-{}-{}-{}-history.png'
-                        .format(now.strftime("%Y-%m-%d"), model_type, name, dimension))
-            frame.to_csv('results/{}-train-{}-{}-{}-results.csv'
-                         .format(now.strftime("%Y-%m-%d"), model_type, name, dimension), index=False)
+            plt.savefig('results/{}/{}-train-{}-{}-{}-history.png'
+                        .format(frac_str, now.strftime("%Y-%m-%d"), model_type, name, dimension))
+            frame.to_csv('results/{}/{}-train-{}-{}-{}-results.csv'
+                         .format(frac_str, now.strftime("%Y-%m-%d"), model_type, name, dimension), index=False)
         pd_report = pd.DataFrame.from_dict(report, orient='index',
                                            columns=['accuracy', 'precision', 'recall', 'f1-score', 'roc_auc'])
         now = datetime.datetime.now()
-        pd_report.to_csv('results/{}-train-{}-{}-results.csv'
-                         .format(now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
+        pd_report.to_csv('results/{}/{}-train-{}-{}-results.csv'
+                         .format(frac_str, now.strftime("%Y-%m-%d"), model_type, dimension), index=True)
 
     else:
         raise KeyError('Model type not found.')
@@ -222,40 +226,42 @@ def train(data, dimension, labels, model_type='sk-models'):
 
 def main():
     dimensions = [100, 500, 1_000]
+    fracs = [0.01, 0.1]
 
     # print("Loading data...")
     # import_files()
-    #
     # df = load('merged_tweets')
     # df.to_pickle('train-data.zip')
-    # df = pd.read_pickle('train-data.zip')
-    # df = df.sample(frac=0.1)
-    #
     # tdf = load('recent_merged_tweets')
     # tdf.to_pickle('test-data.zip')
-    # tdf = pd.read_pickle('test-data.zip')
-    # tdf = tdf.sample(frac=0.1)
-    #
-    # print("Start pre-processing...")
-    # process(df, 'train', dimensions)
-    # process(tdf, 'test', dimensions, False)
-    # print("Pre-processing complete.")
 
-    print("Running model training...")
-    for dimension in dimensions:
-        data = joblib.load('data/train-data-rs-{}.gz'.format(dimension))
-        labels = joblib.load('data/train-label-rs-{}.gz'.format(dimension))
-        train(data, dimension, labels)
-        train(data, dimension, labels, 'tf-models')
-        del data, labels
+    for frac in fracs:
+        print("Start pre-processing...")
+        df = pd.read_pickle('train-data.zip')
+        df = df.sample(frac=frac)
+        tdf = pd.read_pickle('test-data.zip')
+        tdf = tdf.sample(frac=frac)
+        process(df, frac, 'train', dimensions, True)
+        process(tdf, frac, 'test', dimensions, False)
+        print("Pre-processing complete.")
 
-    print("Making predictions...")
-    for dimension in dimensions:
-        data = joblib.load('data/test-data-dm-{}.gz'.format(dimension))
-        labels = joblib.load('data/test-label-tf.gz'.format(dimension))
-        predict(data, dimension, labels)
-        predict(data, dimension, labels, 'tf-models')
-        del data, labels
+        print("Running model training...")
+        for dimension in dimensions:
+            data = joblib.load('data/{}/train-data-rs-{}.gz'.format(frac, dimension))
+            labels = joblib.load('data/{}/train-label-rs-{}.gz'.format(frac, dimension))
+            train(data, dimension, labels, frac, 'sk-models')
+            train(data, dimension, labels, frac, 'tf-models')
+            del data, labels
+
+        print("Making predictions...")
+        for dimension in dimensions:
+            data = joblib.load('data/{}/test-data-dm-{}.gz'.format(frac, dimension))
+            labels = joblib.load('data/{}/test-label-tf.gz'.format(frac, dimension))
+            predict(data, dimension, labels, frac, 'sk-models')
+            predict(data, dimension, labels, frac, 'tf-models')
+            del data, labels
+
+        del df, tdf
 
 
 if __name__ == '__main__':
