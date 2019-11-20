@@ -24,7 +24,7 @@ class SkModels:
         }
 
     def validate(self, model, data, labels):
-        splitter = StratifiedKFold(n_splits=4, random_state=1)
+        splitter = StratifiedKFold(n_splits=10, random_state=1)
         return cross_validate(model, data, labels, cv=splitter, scoring=self.scoring,
                               return_train_score=False, n_jobs=-1,
                               return_estimator=False, error_score=np.nan)

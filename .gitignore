@@ -9,3 +9,4 @@ venv/
 *.ipynb
 .ipynb_checkpoints
 results/
+config.py
