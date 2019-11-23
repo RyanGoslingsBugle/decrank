@@ -11,6 +11,7 @@ import seaborn as sns
 from scipy import sparse
 from sklearn.metrics import confusion_matrix, roc_auc_score, precision_recall_fscore_support, accuracy_score
 from lxml import html
+from tqdm import tqdm
 
 import dbsetup
 import frameset
@@ -229,8 +230,9 @@ def train(data, dimension, labels, frac_str, model_type='sk-models'):
     del scores
 
 
-def compare(data, labels, frac_str):
+def compare(df, frac_str):
     results = []
+    labels = []
     url = 'http://chuachinhon.pythonanywhere.com/predict'
     headers = {
         'Origin': 'http://chuachinhon.pythonanywhere.com',
@@ -238,29 +240,31 @@ def compare(data, labels, frac_str):
         'DNT': '1',
         'Content-Type': 'application/x-www-form-urlencoded'
     }
-    for text in data:
+    for idx, row in tqdm(df.iterrows(), total=df.shape[0]):
         message_data = {
-            'message': text
+            'message': row['full_text']
         }
         r = requests.post(url, headers=headers, data=message_data)
-        tree = html.fromstring(r.content)
-        if tree.xpath("//p[@style='color:black; font-size:40px; text-align: center;']/text()") == 'State-backed tweet':
-            results.append(1)
-        else:
-            results.append(0)
-
+        if r.ok:
+            if r.status_code == 200:
+                tree = html.fromstring(r.content)
+                results.append(1 if tree.xpath("//p[@style='color:black; font-size:40px; text-align: center;']/text()") == ['State-backed tweet'] else 0)
+                labels.append(1 if row['label'] == 'astroturf' else 0)
     accuracy = accuracy_score(labels, results)
     precision, recall, f_score, support = precision_recall_fscore_support(labels, results, average='macro')
     roc_auc = roc_auc_score(labels, results, average='macro')
     now = datetime.datetime.now()
 
-    with open('results/{}/{}-compare-results.csv'.format(frac_str, now)) as f:
+    with open('results/{}/{}-compare-results.csv'.format(frac_str, now.strftime("%Y-%m-%d")), encoding='utf-8', mode='w') as f:
         writer = csv.writer(f)
         writer.writerow(['Accuracy', 'Precision', 'Recall', 'F Score', 'ROC AUC'])
         writer.writerow([accuracy, precision, recall, f_score, roc_auc])
 
 
 def main():
+    dimensions = [100, 500, 1_000]
+    fracs = [0.02, 0.2]
+
     print("Loading data...")
     import_files()
     df = load('merged_tweets')
@@ -269,23 +273,18 @@ def main():
     tdf.to_pickle('test-data.zip')
 
     print("Start pre-processing...")
-    dimensions = [100, 500, 1_000]
-    fracs = [0.02, 0.2]
-
     odf = pd.read_pickle('ood-data.zip')
     odf = odf.sample(frac=0.5)
     process(df=odf, frac_str=0.5, type_str='domain-test', dimensions=dimensions, balance=False)
-    del odf
 
+    df = pd.read_pickle('train-data.zip')
     for frac in fracs:
-        df = pd.read_pickle('train-data.zip')
-        df = df.sample(frac=frac)
-
-        arrays = np.array_split(df, 2)
-        df = arrays[0]
+        ndf = df.sample(frac=frac)
+        arrays = np.array_split(ndf, 2)
+        ndf = arrays[0]
         tdf = arrays[1]
-        joblib.dump(tdf.full_text.values.tolist(), 'data/{}/compare-data.gz'.format(frac), compress=3)
-        process(df=df, frac_str=frac, type_str='train', dimensions=dimensions, balance=True)
+        joblib.dump(tdf[['full_text', 'label']].copy(), 'data/{}/compare-data.gz'.format(frac), compress=3)
+        process(df=ndf, frac_str=frac, type_str='train', dimensions=dimensions, balance=True)
         process(df=tdf, frac_str=frac, type_str='test', dimensions=dimensions, balance=False)
 
     print("Pre-processing complete.")
@@ -300,9 +299,6 @@ def main():
 
         print("Making predictions on test set...")
         labels = joblib.load('data/{}/test-label-tf.gz'.format(frac))
-        message_data = joblib.load('data/{}/compare-data.gz'.format(frac))
-        compare(data=message_data, labels=labels, frac_str=frac)
-
         for dimension in dimensions:
             data = joblib.load('data/{}/test-data-dm-{}.gz'.format(frac, dimension))
             predict(data=data, dimension=dimension, labels=labels, frac_str=frac, model_type='sk-models')
@@ -317,6 +313,10 @@ def main():
                     model_type='sk-models', type_str='domain-test')
             predict(data=data, dimension=dimension, labels=labels, frac_str=frac,
                     model_type='tf-models', type_str='domain-test')
+
+        print("Getting comparison predictions...")
+        message_data = joblib.load('data/{}/compare-data.gz'.format(frac))
+        compare(df=message_data, frac_str=frac)
 
 
 if __name__ == '__main__':
